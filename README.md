@@ -53,6 +53,12 @@ python -m src.cli status summary
 python -m src.cli status keywords
 ```
 
+按关键词从 PubMed 获取摘要并入库：
+
+```bash
+python -m src.cli collect abstracts --source pubmed --query "genOway" --limit 20
+```
+
 运行测试：
 
 ```bash

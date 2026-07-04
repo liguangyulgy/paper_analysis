@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.collectors.pubmed import PubMedCollector
 from src.storage.database import connect, get_database_path, init_database
 from src.storage.repository import PaperRepository
 
@@ -19,6 +20,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    collect_parser = subparsers.add_parser("collect", help="Collect paper metadata.")
+    collect_subparsers = collect_parser.add_subparsers(dest="collect_command", required=True)
+    collect_abstracts = collect_subparsers.add_parser("abstracts", help="Collect paper abstracts.")
+    collect_abstracts.add_argument("--source", choices=["pubmed"], required=True)
+    collect_abstracts.add_argument("--query", required=True)
+    collect_abstracts.add_argument("--limit", type=int, default=20)
 
     init_parser = subparsers.add_parser("init", help="Initialize project resources.")
     init_subparsers = init_parser.add_subparsers(dest="init_command", required=True)
@@ -43,6 +51,39 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init" and args.init_command == "db":
         db_path = init_database(args.db)
         print(f"Initialized database: {db_path}")
+        return 0
+
+    if args.command == "collect" and args.collect_command == "abstracts":
+        db_path = init_database(args.db)
+        if args.source != "pubmed":
+            parser.error("only --source pubmed is currently implemented")
+
+        collector = PubMedCollector()
+        result = collector.collect_by_keyword(args.query, limit=args.limit)
+        created_count = 0
+        updated_count = 0
+        with connect(db_path) as connection:
+            repository = PaperRepository(connection)
+            for paper in result.papers:
+                match = repository.upsert_paper(
+                    paper,
+                    source={
+                        "source": "pubmed",
+                        "source_record_id": paper.get("pmid"),
+                        "query_keyword": args.query,
+                        "source_url": _pubmed_url(paper.get("pmid")),
+                    },
+                )
+                if match.created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+        print(
+            "Collected PubMed abstracts: "
+            f"found={len(result.pmids)}, parsed={len(result.papers)}, "
+            f"created={created_count}, updated={updated_count}"
+        )
         return 0
 
     if args.command == "status" and args.status_command == "summary":
@@ -106,6 +147,12 @@ def _print_keyword_summary(summary: list[dict[str, Any]], db_path: Path) -> None
     print("Keyword hits:")
     for row in summary:
         print(f"- {row['keyword_group']}:{row['keyword']} = {row['paper_count']}")
+
+
+def _pubmed_url(pmid: object | None) -> str | None:
+    if not pmid:
+        return None
+    return f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
 
 
 if __name__ == "__main__":

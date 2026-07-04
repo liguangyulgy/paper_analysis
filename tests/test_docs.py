@@ -23,14 +23,23 @@ def test_readme_current_commands_match_cli_parser():
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
     parser = build_parser()
 
-    documented_commands = [
-        ["init", "db"],
-        ["status", "summary"],
-        ["status", "keywords"],
-    ]
-    for command in documented_commands:
-        assert f"python -m src.cli {' '.join(command)}" in readme
-        parser.parse_args(command)
+    documented_commands = {
+        "python -m src.cli init db": ["init", "db"],
+        "python -m src.cli status summary": ["status", "summary"],
+        "python -m src.cli status keywords": ["status", "keywords"],
+        'python -m src.cli collect abstracts --source pubmed --query "genOway" --limit 20': [
+            "collect",
+            "abstracts",
+            "--source",
+            "pubmed",
+            "--query",
+            "genOway",
+            "--limit",
+            "20",
+        ],
+    }
+    for documented, argv in documented_commands.items():
+        assert documented in readme
+        parser.parse_args(argv)
 
     assert "当前代码只支持以下命令" in readme
-    assert "python -m src.cli collect abstracts" not in readme
