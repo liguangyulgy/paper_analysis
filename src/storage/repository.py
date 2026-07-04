@@ -4,6 +4,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
+from src.analysis.evidence_classifier import classify_paper_evidence
 from src.analysis.keywords import KeywordRule, match_keywords
 from src.domain.status import validate_status_fields
 from src.utils.normalizers import normalize_doi, normalize_pmcid, normalize_pmid, normalize_title
@@ -63,6 +64,7 @@ class PaperRepository:
         if source:
             self.add_source(paper_id, source)
         self.refresh_keyword_hits(paper_id)
+        self.refresh_evidence(paper_id)
         return PaperMatch(paper_id=paper_id, created=created)
 
     def find_existing_paper(
@@ -175,6 +177,43 @@ class PaperRepository:
             ORDER BY paper_count DESC, keyword_group, keyword
             """
         ).fetchall()
+
+    def refresh_evidence(self, paper_id: int) -> None:
+        paper = self.get_paper(paper_id)
+        if paper is None:
+            raise ValueError(f"paper not found: {paper_id}")
+
+        candidates = classify_paper_evidence(dict(paper))
+        self.connection.execute("DELETE FROM paper_evidence WHERE paper_id = ?", (paper_id,))
+        self.connection.executemany(
+            """
+            INSERT OR IGNORE INTO paper_evidence (
+              paper_id, evidence_type, evidence_level, evidence_sentence,
+              section_name, confidence_score, needs_review, source_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    paper_id,
+                    candidate.evidence_type,
+                    candidate.evidence_level,
+                    candidate.evidence_sentence,
+                    candidate.section_name,
+                    candidate.confidence_score,
+                    int(candidate.needs_review),
+                    "rule",
+                )
+                for candidate in candidates
+            ],
+        )
+
+        best_level = _best_evidence_level([candidate.evidence_level for candidate in candidates])
+        if best_level is not None:
+            self.update_automatic_fields(
+                paper_id,
+                {"evidence_level": best_level},
+                reason="rule evidence classification",
+            )
 
     def update_manual_fields(
         self,
@@ -425,3 +464,10 @@ class PaperRepository:
                 reason,
             ),
         )
+
+
+def _best_evidence_level(levels: list[str]) -> str | None:
+    if not levels:
+        return None
+    rank = {"A": 4, "B": 3, "C": 2, "D": 1, "unknown": 0, "X": -1}
+    return max(levels, key=lambda level: rank.get(level, 0))

@@ -44,6 +44,7 @@ def test_readme_current_commands_match_cli_parser():
             "--format",
             "markdown",
         ],
+        "python -m src.cli report evidence --format csv": ["report", "evidence", "--format", "csv"],
     }
     for documented, argv in documented_commands.items():
         assert documented in readme

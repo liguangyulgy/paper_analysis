@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.collectors.pubmed import PubMedCollector
+from src.reports.evidence import export_evidence_report
 from src.reports.simple import export_simple_report
 from src.storage.database import connect, get_database_path, init_database
 from src.storage.repository import PaperRepository
@@ -48,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_simple = report_subparsers.add_parser("simple", help="Export a simple paper list.")
     report_simple.add_argument("--format", choices=["csv", "markdown"], default="csv")
     report_simple.add_argument("--output", type=Path, default=None)
+    report_evidence = report_subparsers.add_parser(
+        "evidence", help="Export a bucketed rule-evidence report."
+    )
+    report_evidence.add_argument("--format", choices=["csv", "markdown"], default="csv")
+    report_evidence.add_argument("--output", type=Path, default=None)
 
     return parser
 
@@ -137,6 +143,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Exported simple report: {path}")
         return 0
 
+    if args.command == "report" and args.report_command == "evidence":
+        db_path = init_database(args.db)
+        if not db_path.exists():
+            parser.error(f"database does not exist: {db_path}. Run `python -m src.cli init db` first.")
+        output_path = args.output or _default_evidence_report_path(args.format)
+        with connect(db_path) as connection:
+            path = export_evidence_report(connection, output_path, output_format=args.format)
+        print(f"Exported evidence report: {path}")
+        return 0
+
     parser.error("unknown command")
     return 2
 
@@ -177,6 +193,11 @@ def _pubmed_url(pmid: object | None) -> str | None:
 def _default_simple_report_path(output_format: str) -> Path:
     extension = "md" if output_format == "markdown" else "csv"
     return Path("data") / "exports" / f"simple_report.{extension}"
+
+
+def _default_evidence_report_path(output_format: str) -> Path:
+    extension = "md" if output_format == "markdown" else "csv"
+    return Path("data") / "exports" / f"evidence_report.{extension}"
 
 
 if __name__ == "__main__":
