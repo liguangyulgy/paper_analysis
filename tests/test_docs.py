@@ -37,6 +37,13 @@ def test_readme_current_commands_match_cli_parser():
             "--limit",
             "20",
         ],
+        "python -m src.cli report simple --format csv": ["report", "simple", "--format", "csv"],
+        "python -m src.cli report simple --format markdown": [
+            "report",
+            "simple",
+            "--format",
+            "markdown",
+        ],
     }
     for documented, argv in documented_commands.items():
         assert documented in readme

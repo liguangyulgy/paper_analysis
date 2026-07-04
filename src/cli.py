@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.collectors.pubmed import PubMedCollector
+from src.reports.simple import export_simple_report
 from src.storage.database import connect, get_database_path, init_database
 from src.storage.repository import PaperRepository
 from src.utils.http import inject_system_truststore
@@ -41,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
         "keywords", help="Show keyword hit counts grouped like tags."
     )
     status_keywords.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    report_parser = subparsers.add_parser("report", help="Export reports.")
+    report_subparsers = report_parser.add_subparsers(dest="report_command", required=True)
+    report_simple = report_subparsers.add_parser("simple", help="Export a simple paper list.")
+    report_simple.add_argument("--format", choices=["csv", "markdown"], default="csv")
+    report_simple.add_argument("--output", type=Path, default=None)
 
     return parser
 
@@ -120,6 +127,16 @@ def main(argv: list[str] | None = None) -> int:
             _print_keyword_summary(summary, db_path)
         return 0
 
+    if args.command == "report" and args.report_command == "simple":
+        db_path = get_database_path(args.db)
+        if not db_path.exists():
+            parser.error(f"database does not exist: {db_path}. Run `python -m src.cli init db` first.")
+        output_path = args.output or _default_simple_report_path(args.format)
+        with connect(db_path) as connection:
+            path = export_simple_report(connection, output_path, output_format=args.format)
+        print(f"Exported simple report: {path}")
+        return 0
+
     parser.error("unknown command")
     return 2
 
@@ -155,6 +172,11 @@ def _pubmed_url(pmid: object | None) -> str | None:
     if not pmid:
         return None
     return f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+
+
+def _default_simple_report_path(output_format: str) -> Path:
+    extension = "md" if output_format == "markdown" else "csv"
+    return Path("data") / "exports" / f"simple_report.{extension}"
 
 
 if __name__ == "__main__":

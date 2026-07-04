@@ -59,6 +59,13 @@ python -m src.cli status keywords
 python -m src.cli collect abstracts --source pubmed --query "genOway" --limit 20
 ```
 
+导出简单论文清单：
+
+```bash
+python -m src.cli report simple --format csv
+python -m src.cli report simple --format markdown
+```
+
 运行测试：
 
 ```bash
