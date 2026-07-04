@@ -101,6 +101,25 @@ CREATE TABLE IF NOT EXISTS paper_evidence (
   UNIQUE(paper_id, evidence_type, evidence_sentence)
 );
 
+CREATE TABLE IF NOT EXISTS paper_keyword_hits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+  keyword TEXT NOT NULL,
+  keyword_group TEXT NOT NULL,
+  matched_text TEXT NOT NULL,
+  matched_field TEXT NOT NULL,
+  evidence_sentence TEXT,
+  source_config TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(paper_id, keyword, keyword_group, matched_field, evidence_sentence)
+);
+
+CREATE INDEX IF NOT EXISTS idx_paper_keyword_hits_keyword
+ON paper_keyword_hits(keyword);
+
+CREATE INDEX IF NOT EXISTS idx_paper_keyword_hits_group
+ON paper_keyword_hits(keyword_group);
+
 CREATE TABLE IF NOT EXISTS paper_external_links (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   paper_id INTEGER NOT NULL REFERENCES papers(id) ON DELETE CASCADE,

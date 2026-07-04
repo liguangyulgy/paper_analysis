@@ -5,6 +5,8 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
+from src.analysis.keywords import KeywordRule, match_keywords
+
 MANUAL_PROTECTED_FIELDS = {
     "evidence_level",
     "reference_value",
@@ -29,8 +31,14 @@ class PaperMatch:
 
 
 class PaperRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        keyword_rules: list[KeywordRule] | None = None,
+    ) -> None:
         self.connection = connection
+        self.keyword_rules = keyword_rules
 
     def upsert_paper(self, paper: dict[str, Any], source: dict[str, Any] | None = None) -> PaperMatch:
         title = (paper.get("title") or "").strip()
@@ -54,6 +62,7 @@ class PaperRepository:
 
         if source:
             self.add_source(paper_id, source)
+        self.refresh_keyword_hits(paper_id)
         return PaperMatch(paper_id=paper_id, created=created)
 
     def find_existing_paper(
@@ -107,6 +116,61 @@ class PaperRepository:
                 source.get("raw_json_path"),
             ),
         )
+
+    def refresh_keyword_hits(self, paper_id: int) -> None:
+        paper = self.get_paper(paper_id)
+        if paper is None:
+            raise ValueError(f"paper not found: {paper_id}")
+
+        hits = match_keywords(
+            {
+                "title": paper["title"],
+                "abstract": paper["abstract"],
+            },
+            self.keyword_rules,
+        )
+        self.connection.execute("DELETE FROM paper_keyword_hits WHERE paper_id = ?", (paper_id,))
+        self.connection.executemany(
+            """
+            INSERT OR IGNORE INTO paper_keyword_hits (
+              paper_id, keyword, keyword_group, matched_text, matched_field,
+              evidence_sentence, source_config
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    paper_id,
+                    hit.keyword,
+                    hit.keyword_group,
+                    hit.matched_text,
+                    hit.matched_field,
+                    hit.evidence_sentence,
+                    hit.source_config,
+                )
+                for hit in hits
+            ],
+        )
+
+    def list_keyword_hits(self, paper_id: int) -> list[sqlite3.Row]:
+        return self.connection.execute(
+            """
+            SELECT *
+            FROM paper_keyword_hits
+            WHERE paper_id = ?
+            ORDER BY keyword_group, keyword, matched_field
+            """,
+            (paper_id,),
+        ).fetchall()
+
+    def get_keyword_summary(self) -> list[sqlite3.Row]:
+        return self.connection.execute(
+            """
+            SELECT keyword_group, keyword, COUNT(DISTINCT paper_id) AS paper_count
+            FROM paper_keyword_hits
+            GROUP BY keyword_group, keyword
+            ORDER BY paper_count DESC, keyword_group, keyword
+            """
+        ).fetchall()
 
     def update_manual_fields(
         self,

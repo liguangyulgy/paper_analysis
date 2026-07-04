@@ -28,6 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     status_subparsers = status_parser.add_subparsers(dest="status_command", required=True)
     status_summary = status_subparsers.add_parser("summary", help="Show paper status summary.")
     status_summary.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    status_keywords = status_subparsers.add_parser(
+        "keywords", help="Show keyword hit counts grouped like tags."
+    )
+    status_keywords.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     return parser
 
@@ -53,6 +57,26 @@ def main(argv: list[str] | None = None) -> int:
             _print_status_summary(summary, db_path)
         return 0
 
+    if args.command == "status" and args.status_command == "keywords":
+        db_path = get_database_path(args.db)
+        if not db_path.exists():
+            parser.error(f"database does not exist: {db_path}. Run `python -m src.cli init db` first.")
+        with connect(db_path) as connection:
+            rows = PaperRepository(connection).get_keyword_summary()
+        summary = [
+            {
+                "keyword_group": row["keyword_group"],
+                "keyword": row["keyword"],
+                "paper_count": row["paper_count"],
+            }
+            for row in rows
+        ]
+        if args.json:
+            print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
+        else:
+            _print_keyword_summary(summary, db_path)
+        return 0
+
     parser.error("unknown command")
     return 2
 
@@ -72,6 +96,16 @@ def _print_status_summary(summary: dict[str, Any], db_path: Path) -> None:
         values = summary[field]
         rendered = ", ".join(f"{key}={value}" for key, value in sorted(values.items()))
         print(f"{field}: {rendered or '(none)'}")
+
+
+def _print_keyword_summary(summary: list[dict[str, Any]], db_path: Path) -> None:
+    print(f"Database: {db_path}")
+    if not summary:
+        print("Keyword hits: (none)")
+        return
+    print("Keyword hits:")
+    for row in summary:
+        print(f"- {row['keyword_group']}:{row['keyword']} = {row['paper_count']}")
 
 
 if __name__ == "__main__":

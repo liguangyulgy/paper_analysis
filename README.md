@@ -44,6 +44,12 @@ python -m src.cli init db
 python -m src.cli status summary
 ```
 
+查看关键词命中统计：
+
+```bash
+python -m src.cli status keywords
+```
+
 运行测试：
 
 ```bash
@@ -73,3 +79,25 @@ PAPER_ANALYSIS_DB=/path/to/paper_analysis.sqlite
 7. 证据句抽取；
 8. Excel / Markdown 报告导出；
 9. Streamlit WebUI 审核工作台。
+
+## 关键词配置与命中记录
+
+论文关键词放在配置文件中维护，当前默认读取：
+
+```text
+configs/model_keywords.yaml
+```
+
+支持按组配置关键词，例如：
+
+```yaml
+company_keywords:
+  - genOway
+  - 基锘威
+
+model_keywords:
+  - BRGSF
+  - humanized mouse
+```
+
+论文入库时会扫描 `title` 和 `abstract`，命中结果写入 `paper_keyword_hits` 表，记录关键词、关键词组、命中字段和证据句。这样后续报告可以按类似 TAG 的方式聚合论文。
