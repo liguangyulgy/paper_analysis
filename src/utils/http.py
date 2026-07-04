@@ -4,6 +4,11 @@ import time
 import urllib.parse
 import urllib.request
 
+try:
+    import truststore
+except ImportError:  # pragma: no cover - exercised only when optional dependency is absent.
+    truststore = None
+
 
 class HttpClient:
     def __init__(self, *, timeout: float = 30.0, retries: int = 3, delay_seconds: float = 0.34) -> None:
@@ -32,3 +37,10 @@ class HttpClient:
                 last_error = exc
 
         raise RuntimeError(f"HTTP GET failed after {self.retries} attempts: {full_url}") from last_error
+
+
+def inject_system_truststore() -> bool:
+    if truststore is None:
+        return False
+    truststore.inject_into_ssl()
+    return True

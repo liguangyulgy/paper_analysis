@@ -8,6 +8,7 @@ from typing import Any
 from src.collectors.pubmed import PubMedCollector
 from src.storage.database import connect, get_database_path, init_database
 from src.storage.repository import PaperRepository
+from src.utils.http import inject_system_truststore
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,6 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    inject_system_truststore()
     parser = build_parser()
     args = parser.parse_args(argv)
 
