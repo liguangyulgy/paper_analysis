@@ -12,14 +12,15 @@
 ## 推荐阅读顺序
 
 1. `AGENTS.md`
-2. `docs/01-需求分析.md`
-3. `docs/02-概要设计.md`
-4. `docs/03-状态机设计.md`
-5. `docs/04-接口命令.md`
-6. `docs/05-WebUI设计.md`
-7. `docs/06-中文数据源与CAJ处理.md`
-8. `docs/07-工程风险与实施策略.md`
-9. `docs/08-工作计划.md`
+2. `docs/00-当前实现状态.md`
+3. `docs/01-需求分析.md`
+4. `docs/02-概要设计.md`
+5. `docs/03-状态机设计.md`
+6. `docs/04-接口命令设计.md`
+7. `docs/05-WebUI设计.md`
+8. `docs/06-中文数据源与CAJ处理.md`
+9. `docs/07-工程风险与实施策略.md`
+10. `docs/08-工作计划.md`
 
 ## 当前设计原则
 
@@ -31,6 +32,8 @@
 - CAJ 文件第一版只登记，不直接解析；用户转换为 PDF 后再上传分析。
 
 ## 当前可运行能力
+
+注意：`docs/` 中的多数命令仍是设计稿，不代表已经实现。当前代码只支持以下命令。
 
 初始化 SQLite 数据库：
 
@@ -70,15 +73,16 @@ PAPER_ANALYSIS_DB=/path/to/paper_analysis.sqlite
 
 ## MVP 实施顺序
 
-1. SQLite schema、repository 层、基础 CLI；
-2. PubMed 摘要获取；
-3. Crossref DOI 补全；
-4. 去重入库与增量运行；
-5. 手动 PDF 导入；
-6. PDF 文本解析；
-7. 证据句抽取；
-8. Excel / Markdown 报告导出；
-9. Streamlit WebUI 审核工作台。
+MVP-1 只聚焦：
+
+1. PubMed 按关键词获取摘要；
+2. 入库；
+3. DOI / PMID / PMCID / title 去重；
+4. 关键词命中；
+5. 状态汇总；
+6. 最简单 CSV 或 Markdown 导出。
+
+MVP-1 暂不实现 WebUI、中文数据源、CAJ 解析、复杂全文下载、PDF 解析和 Unpaywall 下载。
 
 ## 关键词配置与命中记录
 

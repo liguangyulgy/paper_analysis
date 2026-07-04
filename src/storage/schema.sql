@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS papers (
   fulltext_status TEXT NOT NULL DEFAULT 'not_checked',
   parse_status TEXT NOT NULL DEFAULT 'not_started',
   analysis_status TEXT NOT NULL DEFAULT 'not_started',
-  evidence_level TEXT NOT NULL DEFAULT 'D',
+  evidence_level TEXT NOT NULL DEFAULT 'unknown',
   reference_value TEXT NOT NULL DEFAULT 'unknown',
   review_status TEXT NOT NULL DEFAULT 'needs_review',
   fulltext_source TEXT,

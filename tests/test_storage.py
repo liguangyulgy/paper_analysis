@@ -65,6 +65,68 @@ def test_upsert_paper_deduplicates_by_doi(tmp_path):
         connection.close()
 
 
+def test_upsert_paper_deduplicates_by_normalized_doi(tmp_path):
+    connection, repository = make_repository(tmp_path)
+    try:
+        first = repository.upsert_paper(
+            {"title": "DOI Normalization Study", "doi": "DOI: 10.1234/ABC."}
+        )
+        second = repository.upsert_paper(
+            {"title": "DOI Normalization Study", "doi": "https://doi.org/10.1234/abc"}
+        )
+
+        paper = repository.get_paper(first.paper_id)
+
+        assert first.created is True
+        assert second.created is False
+        assert first.paper_id == second.paper_id
+        assert paper["doi"] == "10.1234/abc"
+    finally:
+        connection.close()
+
+
+def test_evidence_level_defaults_to_unknown(tmp_path):
+    connection, repository = make_repository(tmp_path)
+    try:
+        match = repository.upsert_paper({"title": "Unanalyzed Paper", "doi": "10.1/unknown"})
+        paper = repository.get_paper(match.paper_id)
+
+        assert paper["evidence_level"] == "unknown"
+    finally:
+        connection.close()
+
+
+def test_invalid_status_value_is_rejected(tmp_path):
+    connection, repository = make_repository(tmp_path)
+    try:
+        match = repository.upsert_paper({"title": "Status Paper", "doi": "10.1/status"})
+
+        try:
+            repository.update_automatic_fields(
+                match.paper_id,
+                {"abstract_status": "done"},
+            )
+        except ValueError as exc:
+            assert "invalid abstract_status" in str(exc)
+        else:
+            raise AssertionError("invalid status value should be rejected")
+
+        try:
+            repository.upsert_paper(
+                {
+                    "title": "Bad Status Paper",
+                    "doi": "10.1/bad-status",
+                    "evidence_level": "weak",
+                }
+            )
+        except ValueError as exc:
+            assert "invalid evidence_level" in str(exc)
+        else:
+            raise AssertionError("invalid evidence_level should be rejected")
+    finally:
+        connection.close()
+
+
 def test_status_summary_counts_current_states(tmp_path):
     connection, repository = make_repository(tmp_path)
     try:

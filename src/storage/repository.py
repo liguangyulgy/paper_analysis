@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import re
 import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
 from src.analysis.keywords import KeywordRule, match_keywords
+from src.domain.status import validate_status_fields
+from src.utils.normalizers import normalize_doi, normalize_pmcid, normalize_pmid, normalize_title
 
 MANUAL_PROTECTED_FIELDS = {
     "evidence_level",
@@ -18,10 +19,6 @@ MANUAL_PROTECTED_FIELDS = {
     "disease_area",
     "application_scenario",
 }
-
-
-def normalize_title(title: str) -> str:
-    return re.sub(r"\s+", " ", title.casefold()).strip()
 
 
 @dataclass(frozen=True)
@@ -41,6 +38,9 @@ class PaperRepository:
         self.keyword_rules = keyword_rules
 
     def upsert_paper(self, paper: dict[str, Any], source: dict[str, Any] | None = None) -> PaperMatch:
+        paper = self._normalize_paper_identifiers(paper)
+        self._validate_paper_statuses(paper)
+
         title = (paper.get("title") or "").strip()
         if not title:
             raise ValueError("paper title is required")
@@ -74,6 +74,9 @@ class PaperRepository:
         title: str | None = None,
         year: int | None = None,
     ) -> sqlite3.Row | None:
+        doi = normalize_doi(doi)
+        pmid = normalize_pmid(pmid)
+        pmcid = normalize_pmcid(pmcid)
         for field_name, value in (("doi", doi), ("pmid", pmid), ("pmcid", pmcid)):
             if value:
                 row = self.connection.execute(
@@ -182,6 +185,7 @@ class PaperRepository:
     ) -> None:
         allowed = MANUAL_PROTECTED_FIELDS | {"language"}
         updates = {key: value for key, value in fields.items() if key in allowed}
+        validate_status_fields(updates)
         if not updates and not note:
             return
 
@@ -210,6 +214,8 @@ class PaperRepository:
         row = self.get_paper(paper_id)
         if row is None:
             raise ValueError(f"paper not found: {paper_id}")
+
+        validate_status_fields(fields)
 
         blocked = set()
         if row["manual_override"]:
@@ -253,8 +259,9 @@ class PaperRepository:
             """
             INSERT INTO papers (
               title, normalized_title, abstract, authors, journal, publication_date, year,
-              doi, pmid, pmcid, language, region_relevance, abstract_status, manual_upload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              doi, pmid, pmcid, language, region_relevance, abstract_status,
+              evidence_level, manual_upload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 paper["title"].strip(),
@@ -270,6 +277,7 @@ class PaperRepository:
                 paper.get("language", "unknown"),
                 paper.get("region_relevance", "unknown"),
                 paper.get("abstract_status", "not_checked"),
+                paper.get("evidence_level", "unknown"),
                 int(bool(paper.get("manual_upload", False))),
             ),
         )
@@ -291,6 +299,8 @@ class PaperRepository:
             "region_relevance": paper.get("region_relevance"),
             "abstract_status": paper.get("abstract_status"),
         }
+        candidate_fields = self._normalize_paper_identifiers(candidate_fields)
+        self._validate_paper_statuses(candidate_fields)
         row = self.get_paper(paper_id)
         if row is None:
             raise ValueError(f"paper not found: {paper_id}")
@@ -320,6 +330,7 @@ class PaperRepository:
     ) -> None:
         if not fields:
             return
+        validate_status_fields(fields)
         row = self.get_paper(paper_id)
         if row is None:
             raise ValueError(f"paper not found: {paper_id}")
@@ -353,6 +364,37 @@ class PaperRepository:
                 change_source,
                 reason,
             )
+
+    def _normalize_paper_identifiers(self, paper: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(paper)
+        if "doi" in normalized:
+            normalized["doi"] = normalize_doi(normalized["doi"])
+        if "pmid" in normalized:
+            normalized["pmid"] = normalize_pmid(normalized["pmid"])
+        if "pmcid" in normalized:
+            normalized["pmcid"] = normalize_pmcid(normalized["pmcid"])
+        return normalized
+
+    def _validate_paper_statuses(self, paper: dict[str, Any]) -> None:
+        validate_status_fields(
+            {
+                key: value
+                for key, value in paper.items()
+                if key
+                in {
+                    "discovery_status",
+                    "abstract_status",
+                    "fulltext_status",
+                    "parse_status",
+                    "analysis_status",
+                    "evidence_level",
+                    "reference_value",
+                    "review_status",
+                    "language",
+                    "region_relevance",
+                }
+            }
+        )
 
     def _record_event(
         self,
