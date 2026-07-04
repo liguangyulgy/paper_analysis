@@ -1,0 +1,4 @@
+reports:
+  default_output_dir: data/exports
+  include_evidence_sentences: true
+  high_value_requires_evidence: true

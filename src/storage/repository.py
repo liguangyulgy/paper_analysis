@@ -1,0 +1,318 @@
+from __future__ import annotations
+
+import re
+import sqlite3
+from dataclasses import dataclass
+from typing import Any
+
+MANUAL_PROTECTED_FIELDS = {
+    "evidence_level",
+    "reference_value",
+    "review_status",
+    "region_relevance",
+    "model_name",
+    "model_type",
+    "target",
+    "disease_area",
+    "application_scenario",
+}
+
+
+def normalize_title(title: str) -> str:
+    return re.sub(r"\s+", " ", title.casefold()).strip()
+
+
+@dataclass(frozen=True)
+class PaperMatch:
+    paper_id: int
+    created: bool
+
+
+class PaperRepository:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.connection = connection
+
+    def upsert_paper(self, paper: dict[str, Any], source: dict[str, Any] | None = None) -> PaperMatch:
+        title = (paper.get("title") or "").strip()
+        if not title:
+            raise ValueError("paper title is required")
+
+        existing = self.find_existing_paper(
+            doi=paper.get("doi"),
+            pmid=paper.get("pmid"),
+            pmcid=paper.get("pmcid"),
+            title=title,
+            year=paper.get("year"),
+        )
+        if existing is not None:
+            paper_id = int(existing["id"])
+            self._merge_paper_fields(paper_id, paper)
+            created = False
+        else:
+            paper_id = self._insert_paper(paper)
+            created = True
+
+        if source:
+            self.add_source(paper_id, source)
+        return PaperMatch(paper_id=paper_id, created=created)
+
+    def find_existing_paper(
+        self,
+        *,
+        doi: str | None = None,
+        pmid: str | None = None,
+        pmcid: str | None = None,
+        title: str | None = None,
+        year: int | None = None,
+    ) -> sqlite3.Row | None:
+        for field_name, value in (("doi", doi), ("pmid", pmid), ("pmcid", pmcid)):
+            if value:
+                row = self.connection.execute(
+                    f"SELECT * FROM papers WHERE {field_name} = ?", (value,)
+                ).fetchone()
+                if row:
+                    return row
+
+        if title:
+            normalized = normalize_title(title)
+            if year is None:
+                return self.connection.execute(
+                    "SELECT * FROM papers WHERE normalized_title = ? ORDER BY id LIMIT 1",
+                    (normalized,),
+                ).fetchone()
+            return self.connection.execute(
+                """
+                SELECT * FROM papers
+                WHERE normalized_title = ? AND (year = ? OR year IS NULL)
+                ORDER BY id
+                LIMIT 1
+                """,
+                (normalized, year),
+            ).fetchone()
+        return None
+
+    def add_source(self, paper_id: int, source: dict[str, Any]) -> None:
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO paper_sources (
+              paper_id, source, source_record_id, query_keyword, source_url, raw_json_path
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                paper_id,
+                source.get("source"),
+                source.get("source_record_id"),
+                source.get("query_keyword"),
+                source.get("source_url"),
+                source.get("raw_json_path"),
+            ),
+        )
+
+    def update_manual_fields(
+        self,
+        paper_id: int,
+        fields: dict[str, Any],
+        *,
+        reviewer: str | None = None,
+        note: str | None = None,
+    ) -> None:
+        allowed = MANUAL_PROTECTED_FIELDS | {"language"}
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if not updates and not note:
+            return
+
+        if updates:
+            self._update_fields(
+                paper_id,
+                {**updates, "manual_override": 1},
+                changed_by=reviewer or "manual",
+                change_source="manual",
+                reason=note,
+                respect_manual_override=False,
+            )
+        if note:
+            self.connection.execute(
+                "INSERT INTO manual_notes (paper_id, note, reviewer) VALUES (?, ?, ?)",
+                (paper_id, note, reviewer),
+            )
+
+    def update_automatic_fields(
+        self,
+        paper_id: int,
+        fields: dict[str, Any],
+        *,
+        reason: str | None = None,
+    ) -> None:
+        row = self.get_paper(paper_id)
+        if row is None:
+            raise ValueError(f"paper not found: {paper_id}")
+
+        blocked = set()
+        if row["manual_override"]:
+            blocked = MANUAL_PROTECTED_FIELDS
+
+        updates = {key: value for key, value in fields.items() if key not in blocked}
+        self._update_fields(
+            paper_id,
+            updates,
+            changed_by="system",
+            change_source="automatic",
+            reason=reason,
+            respect_manual_override=True,
+        )
+
+    def get_paper(self, paper_id: int) -> sqlite3.Row | None:
+        return self.connection.execute("SELECT * FROM papers WHERE id = ?", (paper_id,)).fetchone()
+
+    def get_status_summary(self) -> dict[str, Any]:
+        total = self.connection.execute("SELECT COUNT(*) AS count FROM papers").fetchone()["count"]
+        fields = [
+            "abstract_status",
+            "fulltext_status",
+            "parse_status",
+            "analysis_status",
+            "reference_value",
+            "review_status",
+            "region_relevance",
+        ]
+        summary: dict[str, Any] = {"total_papers": total}
+        for field in fields:
+            rows = self.connection.execute(
+                f"SELECT {field} AS value, COUNT(*) AS count FROM papers GROUP BY {field}"
+            ).fetchall()
+            summary[field] = {row["value"]: row["count"] for row in rows}
+        return summary
+
+    def _insert_paper(self, paper: dict[str, Any]) -> int:
+        normalized_title = normalize_title(paper["title"])
+        cursor = self.connection.execute(
+            """
+            INSERT INTO papers (
+              title, normalized_title, abstract, authors, journal, publication_date, year,
+              doi, pmid, pmcid, language, region_relevance, abstract_status, manual_upload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                paper["title"].strip(),
+                normalized_title,
+                paper.get("abstract"),
+                paper.get("authors"),
+                paper.get("journal"),
+                paper.get("publication_date"),
+                paper.get("year"),
+                paper.get("doi"),
+                paper.get("pmid"),
+                paper.get("pmcid"),
+                paper.get("language", "unknown"),
+                paper.get("region_relevance", "unknown"),
+                paper.get("abstract_status", "not_checked"),
+                int(bool(paper.get("manual_upload", False))),
+            ),
+        )
+        paper_id = int(cursor.lastrowid)
+        self._record_event(paper_id, "discovery_status", None, "discovered", "system", "insert", None)
+        return paper_id
+
+    def _merge_paper_fields(self, paper_id: int, paper: dict[str, Any]) -> None:
+        candidate_fields = {
+            "abstract": paper.get("abstract"),
+            "authors": paper.get("authors"),
+            "journal": paper.get("journal"),
+            "publication_date": paper.get("publication_date"),
+            "year": paper.get("year"),
+            "doi": paper.get("doi"),
+            "pmid": paper.get("pmid"),
+            "pmcid": paper.get("pmcid"),
+            "language": paper.get("language"),
+            "region_relevance": paper.get("region_relevance"),
+            "abstract_status": paper.get("abstract_status"),
+        }
+        row = self.get_paper(paper_id)
+        if row is None:
+            raise ValueError(f"paper not found: {paper_id}")
+        updates = {
+            key: value
+            for key, value in candidate_fields.items()
+            if value not in (None, "") and row[key] in (None, "", "unknown", "not_checked")
+        }
+        self._update_fields(
+            paper_id,
+            updates,
+            changed_by="system",
+            change_source="merge",
+            reason="merged metadata from duplicate record",
+            respect_manual_override=True,
+        )
+
+    def _update_fields(
+        self,
+        paper_id: int,
+        fields: dict[str, Any],
+        *,
+        changed_by: str,
+        change_source: str,
+        reason: str | None,
+        respect_manual_override: bool,
+    ) -> None:
+        if not fields:
+            return
+        row = self.get_paper(paper_id)
+        if row is None:
+            raise ValueError(f"paper not found: {paper_id}")
+
+        updates: dict[str, Any] = {}
+        for field, value in fields.items():
+            if field not in row.keys():
+                raise ValueError(f"unknown paper field: {field}")
+            if respect_manual_override and row["manual_override"] and field in MANUAL_PROTECTED_FIELDS:
+                continue
+            if row[field] != value:
+                updates[field] = value
+
+        if not updates:
+            return
+
+        assignments = ", ".join(f"{field} = ?" for field in updates)
+        values = list(updates.values())
+        values.append(paper_id)
+        self.connection.execute(
+            f"UPDATE papers SET {assignments}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            values,
+        )
+        for field, new_value in updates.items():
+            self._record_event(
+                paper_id,
+                field,
+                row[field],
+                new_value,
+                changed_by,
+                change_source,
+                reason,
+            )
+
+    def _record_event(
+        self,
+        paper_id: int,
+        field_name: str,
+        old_value: Any,
+        new_value: Any,
+        changed_by: str,
+        change_source: str,
+        reason: str | None,
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO paper_status_events (
+              paper_id, field_name, old_value, new_value, changed_by, change_source, reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                paper_id,
+                field_name,
+                None if old_value is None else str(old_value),
+                None if new_value is None else str(new_value),
+                changed_by,
+                change_source,
+                reason,
+            ),
+        )

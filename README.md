@@ -29,3 +29,47 @@
 - Google Scholar 只作为人工跳转入口或邮件提醒线索，不做后台自动批量爬取。
 - 知网、万方、维普、SinoMed、NSTL 等中文数据源先作为人工检索入口和手动导入来源。
 - CAJ 文件第一版只登记，不直接解析；用户转换为 PDF 后再上传分析。
+
+## 当前可运行能力
+
+初始化 SQLite 数据库：
+
+```bash
+python -m src.cli init db
+```
+
+查看论文状态汇总：
+
+```bash
+python -m src.cli status summary
+```
+
+运行测试：
+
+```bash
+python -m pytest
+```
+
+默认数据库路径：
+
+```text
+data/processed/paper_analysis.sqlite
+```
+
+也可以通过环境变量覆盖：
+
+```text
+PAPER_ANALYSIS_DB=/path/to/paper_analysis.sqlite
+```
+
+## MVP 实施顺序
+
+1. SQLite schema、repository 层、基础 CLI；
+2. PubMed 摘要获取；
+3. Crossref DOI 补全；
+4. 去重入库与增量运行；
+5. 手动 PDF 导入；
+6. PDF 文本解析；
+7. 证据句抽取；
+8. Excel / Markdown 报告导出；
+9. Streamlit WebUI 审核工作台。

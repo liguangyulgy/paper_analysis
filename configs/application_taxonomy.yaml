@@ -1,0 +1,8 @@
+application_scenarios:
+  - efficacy
+  - safety
+  - pk_pd
+  - mechanism
+  - target_validation
+  - biomarker
+  - model_development
