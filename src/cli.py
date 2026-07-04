@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "report" and args.report_command == "simple":
-        db_path = get_database_path(args.db)
+        db_path = init_database(args.db)
         if not db_path.exists():
             parser.error(f"database does not exist: {db_path}. Run `python -m src.cli init db` first.")
         output_path = args.output or _default_simple_report_path(args.format)

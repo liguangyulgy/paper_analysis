@@ -29,6 +29,7 @@ def test_export_simple_report_csv_includes_keyword_tags(tmp_path):
                 "doi": "10.1/report",
                 "pmid": "123",
                 "year": 2025,
+                "affiliations": "genOway, Lyon, France.",
             }
         )
         output_path = tmp_path / "report.csv"
@@ -37,7 +38,9 @@ def test_export_simple_report_csv_includes_keyword_tags(tmp_path):
         content = output_path.read_text(encoding="utf-8-sig")
 
         assert "title,year,journal" in content
+        assert "genoway_evidence" in content
         assert "BRGSF mouse model from genOway" in content
+        assert "genOway, Lyon, France." in content
         assert "company:genOway" in content
         assert "model:BRGSF" in content
     finally:

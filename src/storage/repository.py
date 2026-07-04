@@ -129,6 +129,7 @@ class PaperRepository:
             {
                 "title": paper["title"],
                 "abstract": paper["abstract"],
+                "affiliations": paper["affiliations"],
             },
             self.keyword_rules,
         )
@@ -258,16 +259,17 @@ class PaperRepository:
         cursor = self.connection.execute(
             """
             INSERT INTO papers (
-              title, normalized_title, abstract, authors, journal, publication_date, year,
+              title, normalized_title, abstract, authors, affiliations, journal, publication_date, year,
               doi, pmid, pmcid, language, region_relevance, abstract_status,
               evidence_level, manual_upload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 paper["title"].strip(),
                 normalized_title,
                 paper.get("abstract"),
                 paper.get("authors"),
+                paper.get("affiliations"),
                 paper.get("journal"),
                 paper.get("publication_date"),
                 paper.get("year"),
@@ -289,6 +291,7 @@ class PaperRepository:
         candidate_fields = {
             "abstract": paper.get("abstract"),
             "authors": paper.get("authors"),
+            "affiliations": paper.get("affiliations"),
             "journal": paper.get("journal"),
             "publication_date": paper.get("publication_date"),
             "year": paper.get("year"),

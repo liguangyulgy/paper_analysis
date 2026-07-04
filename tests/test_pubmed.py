@@ -36,6 +36,9 @@ PUBMED_FETCH_XML = """<?xml version="1.0" encoding="UTF-8" ?>
           <Author>
             <LastName>Smith</LastName>
             <Initials>AB</Initials>
+            <AffiliationInfo>
+              <Affiliation>genOway, Lyon, France.</Affiliation>
+            </AffiliationInfo>
           </Author>
         </AuthorList>
         <Language>eng</Language>
@@ -69,6 +72,7 @@ def test_parse_pubmed_articles_maps_core_fields():
             "title": "BRGSF mouse model from genOway",
             "abstract": "Methods: The humanized mouse model was supplied by genOway.",
             "authors": "Smith AB",
+            "affiliations": "genOway, Lyon, France.",
             "journal": "Example Journal",
             "publication_date": "2025 Jan",
             "year": 2025,

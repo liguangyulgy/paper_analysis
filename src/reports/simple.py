@@ -12,6 +12,8 @@ SIMPLE_REPORT_COLUMNS = [
     "doi",
     "pmid",
     "pmcid",
+    "affiliations",
+    "genoway_evidence",
     "abstract_status",
     "evidence_level",
     "reference_value",
@@ -46,6 +48,7 @@ def _simple_report_rows(connection) -> list[dict[str, object]]:
           p.doi,
           p.pmid,
           p.pmcid,
+          p.affiliations,
           p.abstract_status,
           p.evidence_level,
           p.reference_value,
@@ -61,7 +64,23 @@ def _simple_report_rows(connection) -> list[dict[str, object]]:
         ORDER BY COALESCE(p.year, 0) DESC, p.id DESC
         """
     ).fetchall()
-    return [{column: row[column] for column in SIMPLE_REPORT_COLUMNS} for row in rows]
+    report_rows = []
+    for row in rows:
+        report_row = {column: row[column] for column in SIMPLE_REPORT_COLUMNS if column != "genoway_evidence"}
+        report_row["genoway_evidence"] = _genoway_evidence(row["affiliations"])
+        report_rows.append(report_row)
+    return report_rows
+
+
+def _genoway_evidence(affiliations: str | None) -> str:
+    if not affiliations:
+        return ""
+    matches = [
+        affiliation.strip()
+        for affiliation in affiliations.split("|")
+        if "genoway" in affiliation.casefold()
+    ]
+    return " | ".join(matches)
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:

@@ -56,8 +56,10 @@ python -m src.cli status keywords
 按关键词从 PubMed 获取摘要并入库：
 
 ```bash
-python -m src.cli collect abstracts --source pubmed --query "genOway" --limit 20
+python -m src.cli collect abstracts --source pubmed --query "genOway[Affiliation] AND (mouse OR mice OR model)" --limit 20
 ```
+
+注意：PubMed 中 `genOway` 经常命中作者单位 `Affiliation`，不一定出现在标题或摘要正文。导出报告会保留 `affiliations` 和 `genoway_evidence` 字段，用于说明命中依据。
 
 导出简单论文清单：
 

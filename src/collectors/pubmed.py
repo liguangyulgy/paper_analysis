@@ -103,6 +103,7 @@ def parse_pubmed_articles(xml_text: str) -> list[dict[str, object]]:
                 "title": title,
                 "abstract": _abstract_text(article),
                 "authors": _authors(article),
+                "affiliations": _affiliations(article),
                 "journal": journal,
                 "publication_date": publication_date,
                 "year": year,
@@ -153,6 +154,15 @@ def _authors(article: ET.Element) -> str | None:
         elif last_name:
             names.append(last_name)
     return "; ".join(names) if names else None
+
+
+def _affiliations(article: ET.Element) -> str | None:
+    affiliations = []
+    for node in article.findall(".//AffiliationInfo/Affiliation"):
+        value = _text(node)
+        if value and value not in affiliations:
+            affiliations.append(value)
+    return " | ".join(affiliations) if affiliations else None
 
 
 def _publication_date(article: ET.Element) -> tuple[str | None, int | None]:

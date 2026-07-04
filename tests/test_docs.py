@@ -27,13 +27,13 @@ def test_readme_current_commands_match_cli_parser():
         "python -m src.cli init db": ["init", "db"],
         "python -m src.cli status summary": ["status", "summary"],
         "python -m src.cli status keywords": ["status", "keywords"],
-        'python -m src.cli collect abstracts --source pubmed --query "genOway" --limit 20': [
+        'python -m src.cli collect abstracts --source pubmed --query "genOway[Affiliation] AND (mouse OR mice OR model)" --limit 20': [
             "collect",
             "abstracts",
             "--source",
             "pubmed",
             "--query",
-            "genOway",
+            "genOway[Affiliation] AND (mouse OR mice OR model)",
             "--limit",
             "20",
         ],

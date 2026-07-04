@@ -33,4 +33,14 @@ def init_database(path: str | Path | None = None) -> Path:
     with connect(db_path) as connection:
         schema = SCHEMA_PATH.read_text(encoding="utf-8")
         connection.executescript(schema)
+        _migrate_database(connection)
     return db_path
+
+
+def _migrate_database(connection: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(papers)").fetchall()
+    }
+    if "affiliations" not in columns:
+        connection.execute("ALTER TABLE papers ADD COLUMN affiliations TEXT")

@@ -218,6 +218,30 @@ def test_upsert_paper_records_keyword_hits_from_title_and_abstract(tmp_path):
         connection.close()
 
 
+def test_upsert_paper_records_keyword_hits_from_affiliations(tmp_path):
+    rules = [KeywordRule(keyword="genOway", keyword_group="company", source_config="test")]
+    db_path = tmp_path / "paper_analysis.sqlite"
+    init_database(db_path)
+    connection = connect(db_path)
+    repository = PaperRepository(connection, keyword_rules=rules)
+    try:
+        match = repository.upsert_paper(
+            {
+                "title": "A mouse model paper",
+                "doi": "10.1/affiliation",
+                "affiliations": "genOway, Lyon, France.",
+            }
+        )
+
+        hits = repository.list_keyword_hits(match.paper_id)
+
+        assert len(hits) == 1
+        assert hits[0]["keyword"] == "genOway"
+        assert hits[0]["matched_field"] == "affiliations"
+    finally:
+        connection.close()
+
+
 def test_keyword_hits_refresh_when_duplicate_adds_abstract(tmp_path):
     rules = [KeywordRule(keyword="genOway", keyword_group="company", source_config="test")]
     db_path = tmp_path / "paper_analysis.sqlite"

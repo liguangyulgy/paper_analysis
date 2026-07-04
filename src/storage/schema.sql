@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS papers (
   normalized_title TEXT NOT NULL,
   abstract TEXT,
   authors TEXT,
+  affiliations TEXT,
   journal TEXT,
   publication_date TEXT,
   year INTEGER,

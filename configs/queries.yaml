@@ -1,2 +1,2 @@
 queries:
-  - "genOway mouse"
+  - "genOway[Affiliation] AND (mouse OR mice OR model)"
